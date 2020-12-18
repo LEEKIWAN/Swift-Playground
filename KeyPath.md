@@ -1,111 +1,80 @@
 
-# Property Wrapper
+# Selector
 
-Property Wrapper는 클래스의 멤버 프로퍼티를 감싸는 것으로 여러 맴버 변수가 같은 방식으로 값을 처리 할 때 유용 할 수 있다.
+Selector 는 함수를 가르키는 것?
 
 ```swift
-struct PlayerSetting {
-    var initialSpeed: Double {
-        get {
-            return UserDefaults.standard.double(forKey: "initialSpeed")
-        }
-        set {
-            UserDefaults.standard.setValue(newValue, forKey: "initialSpeed")
-        }
-    }
-    var supportGesture: Bool {
-        get {
-            return UserDefaults.standard.double(forKey: "supportGesture")
-        }
-        set {
-            UserDefaults.standard.setValue(newValue, forKey: "supportGesture")
-        }
-    }
+class Figure {
+    @objc var color: UIColor = .blue
     
-}
-
-```
-상위 PlsyerSetting 의 멤버변수들은 UserDefaults의 값을 저장 하는 것이다.<br>
-현재는 initialSpeed, supportGesture 2개 밖에 없어 괜찮지만, 맴버 변수가 늘어 날수록 반복 되는 코드는 길어지고, 유지보수에도 문제가 있다.
-
-그렇기 때문에 ProperWrapper가 있다.
-
-```swift
-@propertyWrapper
-struct UserDefaultsHelper<Value> {
-    let key: String
-    let defaultValue: Value
-    
-    var wrappedValue: Value {
-        get {
-            return UserDefaults.standard.object(forKey: key) as? Value ?? defaultValue
-        }
-        set {
-            UserDefaults.standard.setValue(newValue, forKey: key)
-        }
+    @objc func draw() {
+        print("draw")
     }
 }
-```
-propertyWrapper를 만들기 위해선 클래스 선언부 앞에 @PropertyWrapper를 추가해주고, 멤버 변수 wrappedValue를 반드시 추가해주어야한다.<br>
 
-그럼 맨위에 있는 클래스 PlayerSetting의 맴버변수들을 PropertyWrapper로 바꾸어보자.
+var selector = #selector(Figure.draw)
+
+```
+주로 특정 함수에 event를 처리 할때 사용할수 있다. 
+
+#selector를 쓰기위해서는 해당 함수 앞에 @objc가 붙어야 한다.
+
+@objc 는 class 내부에서만 사용이 가능하므로, struct 에서는 사용할수 없다. 
+
+
+# KeyPath String Expression
 
 ```swift
-struct PlayerSetting {
-    @UserDefaultsHelper(key: "initialSpeed", defaultValue: 0)
-    var initialSpeed: Double
-    @UserDefaultsHelper(key: "supportGesture", defaultValue: true)
-    var supportGesture: Bool
+class Person: NSObject {
+    @objc let name = "Jane Doe"
+    @objc var age: Int = 0
 }
+
+let p = Person()
+
+p.value(forKey: "name")  // 오타가 생길수 있ㄷ.
+
+p.value(forKey: #keyPath(Person.name))
+
+let key = #keyPath(Person.name)    
 ```
 
-맴버 변수 선언 앞에 propertyWrapper로 선언한 클래스 UserDefaultsHelper 앞에 @를 붙여 <br>
+keyPath는 주로 Key Value Observing 에서 사용 되어진다.
 
-맴버변수앞에 @UserDefaultsHelper를 적으면 된다.
+keyPath 가 있기 전에는 문자열로 값을 전달했다. 이 과정에서 오타가 있을 수 있고 이는 크래쉬로 이어진다.
 
-> 1. UserDefaultsHelper (propertyWrapper)의 wrappedValue의 타입은 initialSpeed 타입하고 같아야 함
-> 2. PlayerSetting 인스턴스를 생성하면 맴버변수 위에있는 UserDefaultsHelper(key:, defaultValue:)가 맴버 변수 갯수만큼 호출
-> 3. PlayerSetting 인스턴스의 initalSpeed는 propertyWrapper의 wrappedValue를 통해 값을 읽고 쓸 수 있음. 
+그래서 나온게 #keyPath 이며 컴파일 시점에 오류를 확인하기 때문에 크래쉬를 방지 할수있다. 
 
-<br>
-PlayerSeeting의 initialSpeed의 타입은 Double 이다. <br>하지만 특정 조건에 따라 Double이 아닌 UserDefaultsHelper 타입으로 쓸 수 있고 <br>
+# Keypath Expression 
 
-<b>2가지 방법이 있다.</b>
+KeyPath String Expression와 Keypath Expression의 차이 
+
+|Keypath String Expression|Keypath Expression|
+|:------:|:-----:|
+|String|AnyKeyPat, PartialKeyPath, KeyPath, WritableKeyPath, ReferenceWritableKeyPath|
+|클래스만 지원|클래스, 구조체 지원|
+|NSObject 상속, @objc 특성 추가|-|
+|컴파일 타임체크|컴파일 타임체크, 제네릭타입, 다양한 키패스 조합|
+
 
 ```swift
-@propertyWrapper
-struct UserDefaultsHelper<Value> {
-    .....
-    func reset() {                       // 1
-        UserDefaults.standard.setValue(defaultValue, forKey: key)
-    }
-    
-    var projectedValue: Self { return self }   // 2
+struct Person2 {
+    let name = "Jane Doe"
+    var age: Int = 0
 }
 
-struct PlayerSetting {
-    ....
-    func resetAll() {                   // 1
-//     initialSpeed.reset()
-       _initialSpeed.reset()
+let name2: KeyPath<Person2, String> = \Person2.name  
+let age2: WritableKeyPath<Person2, Int> = \Person2.age
 
-    }
-}
+
+var p2 = Person2()
+
+let nameValue = p2[keyPath: name2]
+let ageValue = p2[keyPath: age2]
+
+p2[keyPath: age2] = 0
+
 ```
-### 1
-> 주석 added된 함수를 추가하고 실행 해보자. <br>
-> initialSpeed는 타입이 Double이기 때문에 reset 함수를 호출 할 수 없다. <br>
-> UserDefaultsHelper 타입으로 형 변환이 필요한데 변환 할필요 없이 이미 var _initialSpeed: UserDefaultsHelper가 추가 되어 있는것을 확인 할 수있다.
+Keypath Expression는 구조체에서도 사용이 가능하고, @objc 를 붙일 필요도 없다.
 
-```swift
-var currentSetting = PlayerSetting()
-currentSetting.$initialSpeed = 5
-// currentSetting._initialSpeed = 5
-```
-
-### 2
-> _변수 는 접근제어가 private 이기때문에 같은 클래스 내부가 아니면 쓸 수 없다.
-> $로 접근 할수 있는데 $로 접근해주기 위해선 projectedValue를 추가 해줘야 한다.
-
-
-
+#keyPath 와 \. 리턴타입이 다르기 때문에 사용하는곳에 똑같을려나...?
